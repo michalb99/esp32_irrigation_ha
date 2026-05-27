@@ -1,0 +1,15 @@
+# ─── LwIP ─────────────────────────────────────────────────────────────────────
+# Required to resolve mDNS hostnames (e.g. homeassistant.local).
+CONFIG_LWIP_DNS_SUPPORT_MDNS_QUERIES=y
+
+# ─── Watchdog ─────────────────────────────────────────────────────────────────
+# Reboot on hang rather than stalling silently – important for an irrigation
+# controller that must recover automatically.
+CONFIG_ESP_TASK_WDT_PANIC=y
+# Default 5 s is too tight: MQTT reconnect after a broker restart can take
+# longer than that on a slow network.
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=30
+
+# ─── Logging ──────────────────────────────────────────────────────────────────
+# INFO level: enough detail for field diagnostics without flooding the UART.
+CONFIG_LOG_DEFAULT_LEVEL=3
