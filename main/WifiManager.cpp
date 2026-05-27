@@ -21,6 +21,10 @@ WifiManager::WifiManager(const char *ssid, const char *password)
 esp_err_t WifiManager::connect()
 {
     m_event_group = xEventGroupCreate();
+    if (!m_event_group) {
+        ESP_LOGE(TAG, "Failed to create event group");
+        return ESP_ERR_NO_MEM;
+    }
 
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());

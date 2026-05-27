@@ -62,9 +62,18 @@ esp_err_t IrrigationMqtt::begin()
 
     // Queue holds up to RELAY_COUNT * 2 pending commands.
     m_relay_queue  = xQueueCreate(RELAY_COUNT * 2, sizeof(RelayCommand));
+    if (!m_relay_queue) {
+        ESP_LOGE(TAG, "Failed to create relay command queue");
+        return ESP_ERR_NO_MEM;
+    }
     // Allow the first activation immediately (no artificial boot delay).
     m_last_on_tick = xTaskGetTickCount() - pdMS_TO_TICKS(RELAY_ON_MIN_GAP_MS);
-    xTaskCreate(relayTaskEntry, "relay_ctrl", 4096, this, 5, nullptr);
+    if (xTaskCreate(relayTaskEntry, "relay_ctrl", 4096, this, 5, nullptr) != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create relay task");
+        vQueueDelete(m_relay_queue);
+        m_relay_queue = nullptr;
+        return ESP_ERR_NO_MEM;
+    }
 
     return esp_mqtt_client_start(m_client);
 }
@@ -134,7 +143,7 @@ void IrrigationMqtt::onData(const char *topic, int topic_len,
                             m_node_id.c_str(), i + 1);
 
         if (topic_len == len && strncmp(topic, cmd_topic, (size_t)topic_len) == 0) {
-            bool on = (data_len >= 2 && strncasecmp(data, "ON", 2) == 0);
+            bool on = (data_len == 2 && strncasecmp(data, "ON", 2) == 0);
             ESP_LOGI(TAG, "Relay %d command -> %s", i + 1, on ? "ON" : "OFF");
             RelayCommand cmd = { i, on };
             if (xQueueSend(m_relay_queue, &cmd, 0) != pdTRUE) {
@@ -201,10 +210,29 @@ void IrrigationMqtt::publishState(int relay_idx)
 
 void IrrigationMqtt::publishDeviceDiscovery()
 {
-    // Build one component entry per relay.
-    char cmps[RELAY_COUNT][384];
-    for (int i = 0; i < RELAY_COUNT; i++) {
-        snprintf(cmps[i], sizeof(cmps[i]),
+    char config_topic[128];
+    snprintf(config_topic, sizeof(config_topic),
+             "homeassistant/device/%s/config", m_node_id.c_str());
+
+    char payload[1536];
+    int pos = snprintf(payload, sizeof(payload),
+             "{"
+               "\"device\":{"
+                 "\"identifiers\":[\"%s\"],"
+                 "\"name\":\"Irrigation Controller\","
+                 "\"model\":\"ESP32-C3\","
+                 "\"manufacturer\":\"Espressif\""
+               "},"
+               "\"origin\":{"
+                 "\"name\":\"%s\""
+               "},"
+               "\"components\":{",
+             m_node_id.c_str(),
+             m_node_id.c_str());
+
+    for (int i = 0; i < RELAY_COUNT && pos < (int)sizeof(payload) - 1; i++) {
+        if (i > 0) pos += snprintf(payload + pos, sizeof(payload) - pos, ",");
+        pos += snprintf(payload + pos, sizeof(payload) - pos,
                  "\"relay%d\":{"
                    "\"p\":\"switch\","
                    "\"name\":\"Irrigation Zone %d\","
@@ -223,30 +251,7 @@ void IrrigationMqtt::publishDeviceDiscovery()
                  m_node_id.c_str(), i + 1,
                  m_node_id.c_str(), i + 1);
     }
-
-    char config_topic[128];
-    snprintf(config_topic, sizeof(config_topic),
-             "homeassistant/device/%s/config", m_node_id.c_str());
-
-    char payload[1536];
-    snprintf(payload, sizeof(payload),
-             "{"
-               "\"device\":{"
-                 "\"identifiers\":[\"%s\"],"
-                 "\"name\":\"Irrigation Controller\","
-                 "\"model\":\"ESP32-C3\","
-                 "\"manufacturer\":\"Espressif\""
-               "},"
-               "\"origin\":{"
-                 "\"name\":\"%s\""
-               "},"
-               "\"components\":{"
-                 "%s,%s,%s"
-               "}"
-             "}",
-             m_node_id.c_str(),
-             m_node_id.c_str(),
-             cmps[0], cmps[1], cmps[2]);
+    snprintf(payload + pos, sizeof(payload) - pos, "}}");
 
     esp_mqtt_client_publish(m_client, config_topic, payload, 0, /*qos*/1, /*retain*/1);
     ESP_LOGI(TAG, "Device discovery published to %s", config_topic);

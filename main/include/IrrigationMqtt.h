@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <string>
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -57,8 +58,8 @@ private:
     static void relayTaskEntry(void *arg);
     void        relayTask();
 
-    gpio_num_t  m_gpios[RELAY_COUNT];
-    bool        m_states[RELAY_COUNT];
+    gpio_num_t         m_gpios[RELAY_COUNT];
+    std::atomic<bool> m_states[RELAY_COUNT];
 
     std::string               m_broker_host;
     uint16_t                  m_broker_port;
@@ -66,7 +67,7 @@ private:
     std::string               m_username;
     std::string               m_password;
     esp_mqtt_client_handle_t  m_client;
-    bool                      m_connected;
+    std::atomic<bool>         m_connected;
 
     QueueHandle_t m_relay_queue;
     TickType_t    m_last_on_tick;

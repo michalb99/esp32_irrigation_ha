@@ -43,7 +43,7 @@ extern "C" void app_main(void)
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type    = GPIO_INTR_DISABLE,
     };
-    gpio_config(&io_conf);
+    ESP_ERROR_CHECK(gpio_config(&io_conf));
 
     ESP_ERROR_CHECK(wifi.connect());
     // Brief settle time: lwIP needs a moment after getting an IP to join the
