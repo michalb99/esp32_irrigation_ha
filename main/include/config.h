@@ -11,7 +11,7 @@
 
 // Minimum gap (ms) between successive relay ON activations.
 // Prevents inrush current overloads when multiple zones start close together.
-#define RELAY_ON_MIN_GAP_MS  10000
+#define RELAY_ON_MIN_GAP_MS  700
 
 // ─── MQTT / Home Assistant ────────────────────────────────────────────────────
 
