@@ -78,7 +78,8 @@ Desktop.ini
 *.sln.docstates # Visual Studio
 
 # VSCode specific
-.vscode/
+**/.vscode/
 
 # Credentials - never commit
 main/include/secrets.h
+
