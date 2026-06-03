@@ -3,9 +3,9 @@
 // ─── Hardware ────────────────────────────────────────────────────────────────
 
 // GPIO pins for the three relay channels (active-LOW relay module).
-#define RELAY_GPIO_1  10
-#define RELAY_GPIO_2  20
-#define RELAY_GPIO_3   9
+#define RELAY_GPIO_1  3
+#define RELAY_GPIO_2   9
+#define RELAY_GPIO_3  10 
 
 // ─── Relay safety ───────────────────────────────────────────────────────────
 

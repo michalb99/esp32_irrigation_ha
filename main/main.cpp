@@ -26,6 +26,11 @@ extern "C" void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
+    // Turn off onboard LED (GPIO 8, active-HIGH).
+    gpio_reset_pin(GPIO_NUM_8);
+    gpio_set_direction(GPIO_NUM_8, GPIO_MODE_OUTPUT);
+    gpio_set_level(GPIO_NUM_8, 0);
+
     // Pre-set output latches HIGH (relay OFF) before enabling GPIO output.
     for (int i = 0; i < RELAY_COUNT; i++) {
         gpio_set_level(RELAY_GPIOS[i], 1);

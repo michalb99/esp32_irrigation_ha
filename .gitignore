@@ -77,5 +77,8 @@ Desktop.ini
 *.suo       # Visual Studio Solution User Options
 *.sln.docstates # Visual Studio
 
+# VSCode specific
+.vscode/
+
 # Credentials - never commit
 main/include/secrets.h

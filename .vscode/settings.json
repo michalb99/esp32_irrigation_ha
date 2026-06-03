@@ -14,6 +14,6 @@
     "--query-driver=**",
     "--compile-commands-dir=c:\\Michal\\Development\\esp-32\\ESP-IDF\\irrigation\\build"
   ],
-  "idf.portWin": "COM6",
-  "idf.flashType": "JTAG"
+  "idf.portWin": "COM5",
+  "idf.flashType": "UART"
 }
