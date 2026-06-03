@@ -71,4 +71,6 @@ private:
 
     QueueHandle_t m_relay_queue;
     TickType_t    m_last_on_tick;
+    // Tick at which each relay was turned ON (0 = relay is currently OFF).
+    TickType_t    m_relay_on_tick[RELAY_COUNT];
 };

@@ -13,6 +13,11 @@
 // Prevents inrush current overloads when multiple zones start close together.
 #define RELAY_ON_MIN_GAP_MS  700
 
+// Maximum time (ms) any relay is allowed to stay ON without an explicit OFF
+// command. After this period the relay is forced OFF as a safety measure.
+// 3 hours = 3 * 60 * 60 * 1000 ms
+#define RELAY_MAX_ON_MS  (3UL * 60UL * 60UL * 1000UL)
+
 // ─── MQTT / Home Assistant ────────────────────────────────────────────────────
 
 // Node ID: used as the MQTT client-id and as a prefix in all topic paths /

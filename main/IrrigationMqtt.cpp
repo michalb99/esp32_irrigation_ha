@@ -22,8 +22,9 @@ IrrigationMqtt::IrrigationMqtt(const gpio_num_t *relay_gpios,
       m_relay_queue(nullptr), m_last_on_tick(0)
 {
     for (int i = 0; i < RELAY_COUNT; i++) {
-        m_gpios[i]  = relay_gpios[i];
-        m_states[i] = false;
+        m_gpios[i]        = relay_gpios[i];
+        m_states[i]       = false;
+        m_relay_on_tick[i] = 0;
     }
 }
 
@@ -64,7 +65,7 @@ esp_err_t IrrigationMqtt::begin()
     m_relay_queue  = xQueueCreate(RELAY_COUNT * 2, sizeof(RelayCommand));
     if (!m_relay_queue) {
         ESP_LOGE(TAG, "Failed to create relay command queue");
-        return ESP_ERR_NO_MEM;
+        return ESP_ERR_NO_MEM;   
     }
     // Allow the first activation immediately (no artificial boot delay).
     m_last_on_tick = xTaskGetTickCount() - pdMS_TO_TICKS(RELAY_ON_MIN_GAP_MS);
@@ -165,7 +166,26 @@ void IrrigationMqtt::relayTask()
 {
     while (true) {
         RelayCommand cmd;
-        xQueueReceive(m_relay_queue, &cmd, portMAX_DELAY);
+        // Use a 60-second timeout so the watchdog runs even with no commands.
+        bool got_cmd = (xQueueReceive(m_relay_queue, &cmd,
+                                      pdMS_TO_TICKS(60000)) == pdTRUE);
+
+        // ── Safety watchdog ──────────────────────────────────────────────
+        TickType_t now = xTaskGetTickCount();
+        for (int i = 0; i < RELAY_COUNT; i++) {
+            if (m_states[i] && m_relay_on_tick[i] != 0) {
+                TickType_t elapsed = now - m_relay_on_tick[i];
+                if (elapsed >= pdMS_TO_TICKS(RELAY_MAX_ON_MS)) {
+                    ESP_LOGW(TAG,
+                             "Relay %d safety timeout (3 h) - forcing OFF",
+                             i + 1);
+                    setRelay(i, false);
+                    publishState(i);
+                }
+            }
+        }
+
+        if (!got_cmd) continue;
 
         if (cmd.on) {
             // Enforce minimum gap between successive ON activations.
@@ -192,6 +212,8 @@ void IrrigationMqtt::setRelay(int relay_idx, bool on)
     m_states[relay_idx] = on;
     // Active-LOW relay module: GPIO LOW energises the relay.
     gpio_set_level(m_gpios[relay_idx], on ? 0 : 1);
+    // Track when the relay was turned ON for the safety watchdog.
+    m_relay_on_tick[relay_idx] = on ? xTaskGetTickCount() : 0;
 }
 
 void IrrigationMqtt::publishState(int relay_idx)
@@ -243,7 +265,7 @@ void IrrigationMqtt::publishDeviceDiscovery()
                    "\"payload_off\":\"OFF\","
                    "\"state_on\":\"ON\","
                    "\"state_off\":\"OFF\","
-                   "\"retain\":true,"
+                   "\"retain\":false,"
                    "\"device_class\":\"switch\""
                  "}",
                  i + 1, i + 1,
