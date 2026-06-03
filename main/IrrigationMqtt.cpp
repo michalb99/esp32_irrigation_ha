@@ -40,6 +40,12 @@ IrrigationMqtt::~IrrigationMqtt()
 
 esp_err_t IrrigationMqtt::begin()
 {
+    // Build availability topic once so it can be reused as LWT and in discovery.
+    char avail_buf[96];
+    snprintf(avail_buf, sizeof(avail_buf),
+             "homeassistant/device/%s/availability", m_node_id.c_str());
+    m_avail_topic = avail_buf;
+
     esp_mqtt_client_config_t cfg = {};
     cfg.broker.address.hostname  = m_broker_host.c_str();
     cfg.broker.address.port      = m_broker_port;
@@ -49,6 +55,13 @@ esp_err_t IrrigationMqtt::begin()
         cfg.credentials.username = m_username.c_str();
         cfg.credentials.authentication.password = m_password.c_str();
     }
+
+    // Last Will: broker publishes "offline" if the device drops unexpectedly.
+    cfg.session.last_will.topic   = m_avail_topic.c_str();
+    cfg.session.last_will.msg     = "offline";
+    cfg.session.last_will.msg_len = 7;
+    cfg.session.last_will.qos     = 1;
+    cfg.session.last_will.retain  = 1;
 
     m_client = esp_mqtt_client_init(&cfg);
     if (!m_client) {
@@ -121,6 +134,7 @@ void IrrigationMqtt::mqttEventHandler(void *handler_args, esp_event_base_t base,
 void IrrigationMqtt::onConnected()
 {
     publishDeviceDiscovery();
+    publishAvailability(true);
 
     for (int i = 0; i < RELAY_COUNT; i++) {
         char cmd_topic[128];
@@ -230,13 +244,22 @@ void IrrigationMqtt::publishState(int relay_idx)
     ESP_LOGD(TAG, "State relay %d -> %s", relay_idx + 1, payload);
 }
 
+void IrrigationMqtt::publishAvailability(bool online)
+{
+    if (!m_client) return;
+    const char *payload = online ? "online" : "offline";
+    esp_mqtt_client_publish(m_client, m_avail_topic.c_str(),
+                            payload, 0, /*qos*/1, /*retain*/1);
+    ESP_LOGI(TAG, "Availability -> %s", payload);
+}
+
 void IrrigationMqtt::publishDeviceDiscovery()
 {
     char config_topic[128];
     snprintf(config_topic, sizeof(config_topic),
              "homeassistant/device/%s/config", m_node_id.c_str());
 
-    char payload[1536];
+    char payload[2048];
     int pos = snprintf(payload, sizeof(payload),
              "{"
                "\"device\":{"
@@ -261,6 +284,9 @@ void IrrigationMqtt::publishDeviceDiscovery()
                    "\"unique_id\":\"%s_relay%d\","
                    "\"state_topic\":\"homeassistant/switch/%s_relay%d/state\","
                    "\"command_topic\":\"homeassistant/switch/%s_relay%d/set\","
+                   "\"availability_topic\":\"%s\","
+                   "\"payload_available\":\"online\","
+                   "\"payload_not_available\":\"offline\","
                    "\"payload_on\":\"ON\","
                    "\"payload_off\":\"OFF\","
                    "\"state_on\":\"ON\","
@@ -271,7 +297,8 @@ void IrrigationMqtt::publishDeviceDiscovery()
                  i + 1, i + 1,
                  m_node_id.c_str(), i + 1,
                  m_node_id.c_str(), i + 1,
-                 m_node_id.c_str(), i + 1);
+                 m_node_id.c_str(), i + 1,
+                 m_avail_topic.c_str());
     }
     snprintf(payload + pos, sizeof(payload) - pos, "}}");
 

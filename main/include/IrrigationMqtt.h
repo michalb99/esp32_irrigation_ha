@@ -53,6 +53,7 @@ private:
                 const char *data,  int data_len);
     void publishDeviceDiscovery();
     void publishState(int relay_idx);
+    void publishAvailability(bool online);
     void setRelay(int relay_idx, bool on);
 
     static void relayTaskEntry(void *arg);
@@ -66,6 +67,7 @@ private:
     std::string               m_node_id;
     std::string               m_username;
     std::string               m_password;
+    std::string               m_avail_topic;
     esp_mqtt_client_handle_t  m_client;
     std::atomic<bool>         m_connected;
 
