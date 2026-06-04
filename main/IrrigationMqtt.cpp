@@ -113,6 +113,11 @@ void IrrigationMqtt::mqttEventHandler(void *handler_args, esp_event_base_t base,
 
         case MQTT_EVENT_DATA: {
             auto *e = static_cast<esp_mqtt_event_handle_t>(event_data);
+            if (e->retain) {
+                ESP_LOGD(TAG, "Ignoring retained message on topic %.*s",
+                         e->topic_len, e->topic);
+                break;
+            }
             self->onData(e->topic, e->topic_len, e->data, e->data_len);
             break;
         }
