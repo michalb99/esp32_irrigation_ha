@@ -5,6 +5,7 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
+#include "esp_system.h"
 
 static const char *TAG            = "WifiManager";
 static const int   WIFI_CONNECTED = BIT0;
@@ -51,10 +52,15 @@ esp_err_t WifiManager::connect()
     ESP_ERROR_CHECK(esp_wifi_start());
 
     ESP_LOGI(TAG, "Connecting to '%s'...", m_ssid);
-    xEventGroupWaitBits(m_event_group, WIFI_CONNECTED,
-                        pdFALSE, pdTRUE, portMAX_DELAY);
-    ESP_LOGI(TAG, "WiFi connected");
-    return ESP_OK;
+    EventBits_t bits = xEventGroupWaitBits(m_event_group, WIFI_CONNECTED,
+                                           pdFALSE, pdTRUE, pdMS_TO_TICKS(30000));
+    if (bits & WIFI_CONNECTED) {
+        ESP_LOGI(TAG, "WiFi connected");
+        return ESP_OK;
+    }
+    ESP_LOGE(TAG, "WiFi connect timeout – restarting");
+    esp_restart();
+    return ESP_FAIL; // unreachable
 }
 
 // ─── Private ─────────────────────────────────────────────────────────────────

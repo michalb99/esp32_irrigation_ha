@@ -4,6 +4,7 @@
 #include <cstring>
 #include "freertos/task.h"
 #include "esp_log.h"
+#include "cJSON.h"
 #include "config.h"
 
 static const char *TAG = "IrrigationMqtt";
@@ -264,49 +265,55 @@ void IrrigationMqtt::publishDeviceDiscovery()
     snprintf(config_topic, sizeof(config_topic),
              "homeassistant/device/%s/config", m_node_id.c_str());
 
-    char payload[2048];
-    int pos = snprintf(payload, sizeof(payload),
-             "{"
-               "\"device\":{"
-                 "\"identifiers\":[\"%s\"],"
-                 "\"name\":\"Irrigation Controller\","
-                 "\"model\":\"ESP32-C3\","
-                 "\"manufacturer\":\"Espressif\""
-               "},"
-               "\"origin\":{"
-                 "\"name\":\"%s\""
-               "},"
-               "\"components\":{",
-             m_node_id.c_str(),
-             m_node_id.c_str());
+    cJSON *root = cJSON_CreateObject();
 
-    for (int i = 0; i < RELAY_COUNT && pos < (int)sizeof(payload) - 1; i++) {
-        if (i > 0) pos += snprintf(payload + pos, sizeof(payload) - pos, ",");
-        pos += snprintf(payload + pos, sizeof(payload) - pos,
-                 "\"relay%d\":{"
-                   "\"p\":\"switch\","
-                   "\"name\":\"Irrigation Zone %d\","
-                   "\"unique_id\":\"%s_relay%d\","
-                   "\"state_topic\":\"homeassistant/switch/%s_relay%d/state\","
-                   "\"command_topic\":\"homeassistant/switch/%s_relay%d/set\","
-                   "\"availability_topic\":\"%s\","
-                   "\"payload_available\":\"online\","
-                   "\"payload_not_available\":\"offline\","
-                   "\"payload_on\":\"ON\","
-                   "\"payload_off\":\"OFF\","
-                   "\"state_on\":\"ON\","
-                   "\"state_off\":\"OFF\","
-                   "\"retain\":false,"
-                   "\"device_class\":\"switch\""
-                 "}",
-                 i + 1, i + 1,
-                 m_node_id.c_str(), i + 1,
-                 m_node_id.c_str(), i + 1,
-                 m_node_id.c_str(), i + 1,
-                 m_avail_topic.c_str());
+    // device
+    cJSON *device = cJSON_AddObjectToObject(root, "device");
+    cJSON *ids    = cJSON_AddArrayToObject(device, "identifiers");
+    cJSON_AddItemToArray(ids, cJSON_CreateString(m_node_id.c_str()));
+    cJSON_AddStringToObject(device, "name",         "Irrigation Controller");
+    cJSON_AddStringToObject(device, "model",        "ESP32-C3");
+    cJSON_AddStringToObject(device, "manufacturer", "Espressif");
+
+    // origin
+    cJSON *origin = cJSON_AddObjectToObject(root, "origin");
+    cJSON_AddStringToObject(origin, "name", m_node_id.c_str());
+
+    // components
+    cJSON *components = cJSON_AddObjectToObject(root, "components");
+    for (int i = 0; i < RELAY_COUNT; i++) {
+        char key[16], name[32], unique_id[64], state_topic[128], cmd_topic[128];
+        snprintf(key,         sizeof(key),         "relay%d",                                        i + 1);
+        snprintf(name,        sizeof(name),        "Irrigation Zone %d",                             i + 1);
+        snprintf(unique_id,   sizeof(unique_id),   "%s_relay%d",  m_node_id.c_str(),                 i + 1);
+        snprintf(state_topic, sizeof(state_topic), "homeassistant/switch/%s_relay%d/state", m_node_id.c_str(), i + 1);
+        snprintf(cmd_topic,   sizeof(cmd_topic),   "homeassistant/switch/%s_relay%d/set",   m_node_id.c_str(), i + 1);
+
+        cJSON *comp = cJSON_AddObjectToObject(components, key);
+        cJSON_AddStringToObject(comp, "p",                     "switch");
+        cJSON_AddStringToObject(comp, "name",                  name);
+        cJSON_AddStringToObject(comp, "unique_id",             unique_id);
+        cJSON_AddStringToObject(comp, "state_topic",           state_topic);
+        cJSON_AddStringToObject(comp, "command_topic",         cmd_topic);
+        cJSON_AddStringToObject(comp, "availability_topic",    m_avail_topic.c_str());
+        cJSON_AddStringToObject(comp, "payload_available",     "online");
+        cJSON_AddStringToObject(comp, "payload_not_available", "offline");
+        cJSON_AddStringToObject(comp, "payload_on",            "ON");
+        cJSON_AddStringToObject(comp, "payload_off",           "OFF");
+        cJSON_AddStringToObject(comp, "state_on",              "ON");
+        cJSON_AddStringToObject(comp, "state_off",             "OFF");
+        cJSON_AddFalseToObject( comp, "retain");
+        cJSON_AddStringToObject(comp, "device_class",          "switch");
     }
-    snprintf(payload + pos, sizeof(payload) - pos, "}}");
 
-    esp_mqtt_client_publish(m_client, config_topic, payload, 0, /*qos*/1, /*retain*/1);
-    ESP_LOGI(TAG, "Device discovery published to %s", config_topic);
+    char *payload = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+
+    if (payload) {
+        esp_mqtt_client_publish(m_client, config_topic, payload, 0, /*qos*/1, /*retain*/1);
+        ESP_LOGI(TAG, "Device discovery published to %s", config_topic);
+        cJSON_free(payload);
+    } else {
+        ESP_LOGE(TAG, "Failed to serialise discovery payload");
+    }
 }
